@@ -195,5 +195,4 @@ def logout():
     session.pop('user_id', None)
     return ("Logout successful")
 
-if __name__ == "__main__":
-    app.run(debug=True)
+
