@@ -7,6 +7,7 @@ import mysql.connector
 from cryptography.fernet import Fernet
 import random
 import string
+from flask_cors import cross_origin
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -100,6 +101,7 @@ def create_account():
 
 # Route to sign in
 @app.route('/sign_in', methods=['POST'])
+@cross_origin(supports_credentials=True)
 def sign_in():
     data = request.get_json()
     if not data or 'email' not in data or 'password' not in data:

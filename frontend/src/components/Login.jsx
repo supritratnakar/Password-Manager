@@ -10,7 +10,7 @@ const Login = () => {
     const handleLogin =async(e)=>{
       e.preventDefault();
       const req = {"email":email,"password":password};
-      const res = await axios.post('http://localhost:5000/sign_in',req);
+      const res = await axios.post('https://password-manager-backend-pied.vercel.app/sign_in',req);
       //console.log(res.data.message);
       if(res.data.message =="Sign-in successful"){
         navigate('/manage');
