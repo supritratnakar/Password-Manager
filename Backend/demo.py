@@ -1,26 +1,41 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from getpass import getpass
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 import hashlib
 import requests
 import mysql.connector
-from cryptography.fernet import Fernet
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+from Crypto.Protocol.KDF import PBKDF2
 import random
 import string
+import os
+import base64
 
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
 
-key = Fernet.generate_key()
-cipher_suite = Fernet(key)
+# Secret key for session management
+app.secret_key = os.urandom(24)
 
+# Generate a random key and salt for AES encryption
+aes_key = get_random_bytes(16)
+aes_salt = get_random_bytes(16)
+
+# Generate a random key for JWT token generation
+jwt_secret_key = os.urandom(24)
+app.config['JWT_SECRET_KEY'] = jwt_secret_key
+jwt = JWTManager(app)
+
+# MySQL connection
 connection = mysql.connector.connect(
     host="localhost",
     user="root",
     password="suratna",
     database="password_manager"
 )
+
 cursor = connection.cursor()
 
 # Function to generate strong password
@@ -34,11 +49,6 @@ def generate_strong_password(length=12, uppercase=True, digits=True, special_cha
         chars += string.punctuation
 
     return ''.join(random.choice(chars) for _ in range(length))
-
-# Route to render index page
-@app.route('/')
-def index():
-    return render_template('index.html')
 
 # Function to check if a password has been breached
 def is_password_breached(password):
@@ -59,6 +69,24 @@ def is_password_breached(password):
     except Exception as e:
         print(f"Error checking password breach: {e}")
         return False
+
+# Function to encrypt password using AES
+def encrypt_password(password):
+    key = PBKDF2(password, aes_salt, dkLen=32, count=1000000)
+    cipher = AES.new(key, AES.MODE_GCM)
+    ciphertext, tag = cipher.encrypt_and_digest(password.encode())
+    return base64.b64encode(cipher.nonce + tag + ciphertext).decode()
+
+# Function to decrypt password using AES
+def decrypt_password(encrypted_password):
+    decoded_encrypted = base64.b64decode(encrypted_password)
+    key = PBKDF2(password, aes_salt, dkLen=32, count=1000000)
+    nonce = decoded_encrypted[:16]
+    tag = decoded_encrypted[16:32]
+    ciphertext = decoded_encrypted[32:]
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    decrypted_password = cipher.decrypt_and_verify(ciphertext, tag)
+    return decrypted_password.decode()
 
 # Route to check if a password has been breached
 @app.route('/check_password_breached', methods=['POST'])
@@ -97,10 +125,11 @@ def create_account():
             return jsonify({'message': 'Account created successfully'}), 200
     except mysql.connector.Error as err:
         return jsonify({'error': f'Error creating account: {err}'}), 500
+    
 
-# Route to sign in
-@app.route('/sign_in', methods=['POST'])
-def sign_in():
+# Route to sign in and generate JWT token
+@app.route('/login', methods=['POST'])
+def login():
     data = request.get_json()
     if not data or 'email' not in data or 'password' not in data:
         return jsonify({'error': 'Invalid JSON data'}), 400
@@ -113,24 +142,21 @@ def sign_in():
         cursor.execute("SELECT * FROM users WHERE email = %s AND password_hash = %s", (email, hashed_password))
         user = cursor.fetchone()
         if user:
-            session['user_id'] = user[0]
-            return jsonify({'message': 'Sign-in successful'}), 200
+            user_id = user[0]  # Assuming the first column is user_id
+            # Create JWT token with user_id
+            access_token = create_access_token(identity={'user_id': user_id})
+            return jsonify(access_token=access_token), 200
         else:
-            return jsonify({'error': 'Incorrect email or password'}), 400
+            return jsonify({'error': 'Incorrect email or password'}), 401
     except mysql.connector.Error as err:
         return jsonify({'error': f'Error signing in: {err}'}), 500
 
-# Route to render dashboard
-@app.route('/dashboard')
-def dashboard():
-    if 'user_id' in session:
-        return render_template('dashboard.html')
-    return redirect(url_for('sign_in'))
 
 # Route to store password
 @app.route('/store_password', methods=['POST'])
+@jwt_required()  # Protect this route with JWT
 def store_password():
-    if 'user_id' in session:
+    try:
         data = request.get_json()
         if not data or 'url' not in data or 'username' not in data or 'password' not in data:
             return jsonify({'error': 'Invalid JSON data'}), 400
@@ -138,23 +164,41 @@ def store_password():
         url = data['url']
         username = data['username']
         password = data['password']
-        encrypted_password = cipher_suite.encrypt(password.encode()).decode()
-        try:
+        
+        # Get the user's identity from the JWT token
+        current_user = get_jwt_identity()
+        
+        # Ensure the user identity is valid
+        if isinstance(current_user, dict) and 'user_id' in current_user:
+            user_id = current_user['user_id']
+            
+            # Encrypt the password
+            encrypted_password = encrypt_password(password)
+            
+            # Save the password to the database along with the user's id
             cursor.execute("INSERT INTO passwords (user_id, url, username, password_encrypted) VALUES (%s, %s, %s, %s)",
-                           (session['user_id'], url, username, encrypted_password))
+                           (user_id, url, username, encrypted_password))
             connection.commit()
+            
             return jsonify({'message': 'Password stored successfully'}), 200
-        except mysql.connector.Error as err:
-            return jsonify({'error': f'Error storing password: {err}'}), 500
-    else:
-        return jsonify({'error': 'User not logged in'}), 401
+        else:
+            return jsonify({'error': 'Invalid user identity in JWT token'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Error storing password: {e}'}), 500
 
 # Route to retrieve passwords
 @app.route('/retrieve_passwords')
+@jwt_required()  # Protect this route with JWT
 def retrieve_passwords():
-    if 'user_id' in session:
-        try:
-            cursor.execute("SELECT url, username, password_encrypted FROM passwords WHERE user_id = %s", (session['user_id'],))
+    try:
+        # Get the user's identity from the JWT token
+        current_user = get_jwt_identity()
+        
+        # Ensure the user identity is valid
+        if isinstance(current_user, dict) and 'user_id' in current_user:
+            user_id = current_user['user_id']
+            
+            cursor.execute("SELECT url, username, password_encrypted FROM passwords WHERE user_id = %s", (user_id,))
             passwords = cursor.fetchall()
             if passwords:
                 decrypted_passwords = []
@@ -162,14 +206,21 @@ def retrieve_passwords():
                     url = password[0]
                     username = password[1]
                     encrypted_password = password[2]
-                    decrypted_password = cipher_suite.decrypt(encrypted_password.encode()).decode()
-                    decrypted_passwords.append({'url': url, 'username': username, 'password': decrypted_password})
+                    try:
+                        # Decrypt the password using AES
+                        decrypted_password = decrypt_password(encrypted_password)
+                        decrypted_passwords.append({'url': url, 'username': username, 'password': decrypted_password})
+                    except Exception as e:
+                        # Handle decryption errors
+                        print(f"Error decrypting password for URL '{url}': {e}")
+                        decrypted_passwords.append({'url': url, 'username': username, 'password': 'Decryption Error'})
                 return jsonify({'passwords': decrypted_passwords}), 200
             else:
                 return jsonify({'message': 'No passwords found for this user'}), 200
-        except mysql.connector.Error as err:
-            return jsonify({'error': f'Error retrieving passwords: {err}'}), 500
-    return jsonify({'error': 'User not logged in'}), 401
+        else:
+            return jsonify({'error': 'Invalid user identity in JWT token'}), 400
+    except mysql.connector.Error as err:
+        return jsonify({'error': f'Error retrieving passwords: {err}'}), 500
 
 # Route to generate password
 @app.route('/generate_password', methods=['POST'])
@@ -188,13 +239,6 @@ def generate_password():
     password = generate_strong_password(length, uppercase, digits, special_chars)
     return jsonify({'password': password}), 200
 
-
-
-# Route to log out
-@app.route('/logout')
-def logout():
-    session.pop('user_id', None)
-    return ("Logout successful")
-
 if __name__ == "__main__":
     app.run(debug=True)
+
