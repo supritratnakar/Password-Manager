@@ -67,18 +67,16 @@ const Manager = () => {
         }
       };
       
-    const handleRetrievePassword = async()=>{
-        const token = localStorage.getItem('jwt'); // Get JWT token from localStorage
+      const handleRetrievePassword = async () => {
+        const token = localStorage.getItem('jwt');
 
-        const res = await axios.get('http://localhost:5000/retrieve_passwords',{
+        const res = await axios.get('http://localhost:5000/retrieve_passwords', {
             headers: {
-              'Authorization': `Bearer ${token}` // Concatenate token into the Authorization header
+                'Authorization': `Bearer ${token}`
             }
-          });
-          
-          setPasswords(res.data.passwords);
+        });
 
-        console.log(passwords);
+        setPasswords(res.data.passwords);
     }
 
 
@@ -132,31 +130,31 @@ const Manager = () => {
             <button onClick={handleStorePassword}> Store</button>
             </div>}
         <button onClick={handleRetrievePassword}>Retrieve Password</button>
-        {passwords && <div className="password-table">
-      <h2>Passwords</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>App/URL</th>
-            <th>Username</th>
-            <th>Password</th>
-          </tr>
-        </thead>
-        <tbody>
-          {passwords.map((password, index) => (
-            <tr key={index}>
-              <td>{password.url}</td>
-              <td>{password.username}</td>
-              <td>{password.password}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>}
-        <button onClick={handleLogout}>LOGOUT</button>
-
-    </div>
-  )
+        {passwords.length > 0 && (
+                <div className="password-table">
+                    <h2>Passwords</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>App/URL</th>
+                                <th>Username</th>
+                                <th>Password</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {passwords.map((password, index) => (
+                                <tr key={index}>
+                                    <td>{password.url}</td>
+                                    <td>{password.username}</td>
+                                    <td>{password.password}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+            <button onClick={handleLogout}>LOGOUT</button>
+        </div>
+    );
 }
-
 export default Manager
