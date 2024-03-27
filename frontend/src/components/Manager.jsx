@@ -46,23 +46,24 @@ const Manager = () => {
     }
 
     const handleStorePassword = async () => {
-        const req = {
+      const req = {
           "url": url,
           "username": username,
           "password": newPass
-        };
-        axios.defaults.withCredentials = true;
-        const token = localStorage.getItem('jwt'); // Get JWT token from localStorage
-        const res = await axios.post('http://localhost:5000/store_password', req, {
+      };
+      axios.defaults.withCredentials = true;
+      const token = localStorage.getItem('jwt'); // Get JWT token from localStorage
+      const res = await axios.post('http://localhost:5000/store_password', req, {
           headers: {
-            'Authorization': `Bearer ${token}` // Concatenate token into the Authorization header
+              'Authorization': `Bearer ${token}` // Concatenate token into the Authorization header
           }
-        });
-        if (res.data.message === "Password stored successfully") {
+      });
+      if (res.data.message === "Password stored successfully") {
           setUrl('');
           setUsername('');
           setNewPass('');
           setSetstoreClicked(false);
+          alert('Password Stored Successfully'); // Add alert here
         }
       };
       
@@ -82,7 +83,9 @@ const Manager = () => {
 
 
     const handleBreachClick = () =>{
-        console.log("clicked suggest")
+        console.log("clicked suggest");
+        setSuggestClicked(false);
+
         if(breachClicked){
             setBreachClicked(false);
         }else{
@@ -92,18 +95,20 @@ const Manager = () => {
 
     const handleStoreClick = () =>{
         console.log("clicked suggest")
+            setSuggestClicked(false);
         if(storeClicked){
             setSetstoreClicked(false);
         }else{
             setSetstoreClicked(true);
         }
     }
-    const handleLogout = async() =>{
-        const res = await axios.get('http://localhost:5000/logout'); 
-        if(res.data === "Logout successful"){
-            navigate('/')
-        }
-    }
+    const handleLogout = async () => {
+      //const res = await axios.get('http://localhost:5000/logout'); 
+      window.localStorage.setItem("jwt", null);
+      navigate('/');
+      alert('Logout successful');
+  }
+  
 
   return (
     <div>
@@ -115,13 +120,13 @@ const Manager = () => {
             </div>}
         <button onClick={handleBreachClick}>Check Password Breach Status</button>
         {breachClicked && <div>
-            <input placeholder='enter your pass' onChange={(e)=>{setPassword(e.target.value)}}/>
+            <input placeholder='Enter Password' onChange={(e)=>{setPassword(e.target.value)}}/>
             {breachCount && <h5>{breachCount}</h5>}
             <button onClick={handleBreachCheck}>Check</button>
             </div>}
         <button onClick={handleStoreClick}>Store Password</button>
         {storeClicked && <div>
-            <input placeholder='url' onChange={(e)=>{setUrl(e.target.value)}}/>
+            <input placeholder='Enter App/URL' onChange={(e)=>{setUrl(e.target.value)}}/>
             <input placeholder='usename'onChange={(e)=>{setUsername(e.target.value)}}/>
             <input type='password' placeholder='password' onChange={(e)=>{setNewPass(e.target.value)}}/>
             <button onClick={handleStorePassword}> Store</button>
@@ -132,7 +137,7 @@ const Manager = () => {
       <table>
         <thead>
           <tr>
-            <th>URL</th>
+            <th>App/URL</th>
             <th>Username</th>
             <th>Password</th>
           </tr>

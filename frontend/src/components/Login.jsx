@@ -7,17 +7,18 @@ const Login = () => {
     const [password, setPassword] = useState();
     const navigate = useNavigate();
 
-    const handleLogin =async(e)=>{
+    const handleLogin = async (e) => {
       e.preventDefault();
-      const req = {"email":email,"password":password};
-      const res = await axios.post('http://localhost:5000/login',req);
-      //console.log(res.data.message);
-      if(res.status ===200){
-        window.localStorage.setItem("jwt",res.data.access_token);
-        navigate('/manage');
+      const req = {"email": email, "password": password};
+      const res = await axios.post('http://localhost:5000/login', req);
+      
+      if (res.status === 200) {
+          window.localStorage.setItem("jwt", res.data.access_token);
+          navigate('/manage');
+          alert('Login successful');
       }
-      e.preventDefault();
-    }
+  }
+  
   return (
     <div>
         <h1>LOGIN</h1>
